@@ -1,0 +1,71 @@
+﻿# Simple Node.js function that retuns an HTTP response
+exports.handler = async (event) => {
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "text/html"
+    },
+    body: "<h1>Hello World! We are live. We have successfully deployed our stack</h1>"
+  };
+};
+
+
+# CDK stack using python code to define the infrastructure
+from aws_cdk import (
+    Stack,
+    RemovalPolicy,
+    aws_lambda as _lambda,
+    aws_s3 as s3,
+    aws_apigateway as apigateway,
+    CfnOutput
+)
+from constructs import Construct
+import os
+
+
+class Project1Stack(Stack):
+
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+
+        # Create an S3 bucket
+        bucket = s3.Bucket(self, "Project1Bucket",
+                           versioned=True,
+                           bucket_name=f"project1-bucket-{self.account}-{self.region}",
+                           removal_policy=RemovalPolicy.DESTROY,
+                           auto_delete_objects=True)
+
+
+        # Create a Lambda function
+        hello_lambda = _lambda.Function(self, "HelloLambda",
+                                        runtime=_lambda.Runtime.NODEJS_16_X,
+                                        handler="index.handler",
+                                        code=_lambda.Code.from_asset("lambda"),
+                                        environment={
+                                            "BUCKET_NAME": bucket.bucket_name
+                                        })
+
+
+        # Grant the Lambda function read/write permissions to the S3 bucket
+        bucket.grant_read_write(hello_lambda)
+
+
+        # Create an API Gateway
+        api = apigateway.LambdaRestApi(self, "HelloApi",
+                                       handler=hello_lambda,
+                                       proxy=False,
+                                       deploy_options=apigateway.StageOptions(
+                                           stage_name="prod"
+                                       ))
+
+
+        # Add a method to the API Gateway
+        api.root.add_method("GET")
+
+
+        # Output the API Gateway URL
+        CfnOutput(self, "ApiUrl",
+                  value=api.url,
+                  description="API Gateway URL")
